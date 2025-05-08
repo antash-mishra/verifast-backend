@@ -30,7 +30,7 @@ embeddings = JinaEmbeddings(session=None, jina_api_key=SecretStr(JINA_API_KEY or
 vector_store = None
 
 async def generate_response(query: str, session_id: str, task_id: str = None) -> str:
-    """Generate response using RAG pattern."""
+    """Generate response using RAG pattern with citations."""
     global vector_store
 
     # Ensure vector store is initialized
@@ -39,10 +39,25 @@ async def generate_response(query: str, session_id: str, task_id: str = None) ->
 
     # Search for relevant documents
     docs = vector_store.similarity_search(query, k=RAG_NUM_CHUNKS)
-    print("docs: ", docs)
-
-    # Construct context from documents
-    context = "\n\n".join([doc.page_content for doc in docs])
+    
+    # Create context with citations
+    context_with_citations = []
+    citations = []
+    
+    for i, doc in enumerate(docs):
+        citation_id = f"[{i+1}]"
+        context_with_citations.append(f"{doc.page_content} {citation_id}")
+        
+        # Store citation info
+        url = doc.metadata.get("url", "Unknown source")
+        title = doc.metadata.get("title", "Untitled")
+        source = doc.metadata.get("source", "Unknown")
+        
+        citations.append(f"{citation_id} {title} - {source} ({url})")
+    
+    # Construct context from documents with citations
+    context = "\n\n".join(context_with_citations)
+    citations_text = "\n".join(citations)
 
     # Construct prompt
     prompt = f"""You are a helpful assistant that answers queries about recent news.
@@ -53,7 +68,12 @@ CONTEXT:
 QUERY:
 {query}
 
-Please answer the query based on the provided context. If you don't find enough information in the context to give a confident answer, say so, but try to provide helpful information based on what's available. Always cite your sources when possible."""
+CITATIONS:
+{citations_text}
+
+Please answer the query based on the provided context. If you don't find enough information in the context to give a confident answer, say so, but try to provide helpful information based on what's available. 
+
+IMPORTANT: Reference your sources using the citation numbers like [1], [2], etc. when you're citing information from specific documents. At the end of your response, include a "Sources:" section listing the citations you used."""
 
     # Generate response
     try:
@@ -62,7 +82,6 @@ Please answer the query based on the provided context. If you don't find enough 
     except Exception as e:
         print(f"Error generating response: {e}")
         return "I'm sorry, I encountered an error while processing your request. Please try again."
-
 async def ingest_news() -> Dict[str, Any]:
     """Ingest news articles from RSS feeds and store in vector database."""
     global vector_store
