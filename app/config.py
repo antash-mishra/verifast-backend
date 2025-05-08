@@ -19,10 +19,10 @@ SESSION_TTL = int(os.getenv("SESSION_TTL", 86400))  # Default: 24 hours
 
 # Gemini API settings
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GEMINI_MODEL = "gemini-2.5-pro-exp-03-25"
+GEMINI_MODEL = "gemini-2.5-flash-preview-04-17"
 
 # Vector DB settings
-EMBEDDINGS_MODEL = "jina-embeddings-v2-base-en"
+EMBEDDINGS_MODEL = "jina-embeddings-v3"
 JINA_API_KEY = os.getenv("JINA_API_KEY")
 VECTOR_STORE_PATH = ":memory:"  # Use memory for development
 COLLECTION_NAME = "news_articles"
@@ -30,10 +30,10 @@ COLLECTION_NAME = "news_articles"
 # News sources for ingestion
 NEWS_SOURCES = [
     {"title": "BBC News", "url": "http://feeds.bbci.co.uk/news/rss.xml", "description": "Latest news from BBC"},
-    # {"title": "CNN", "url": "http://rss.cnn.com/rss/edition.rss", "description": "Breaking news from CNN"},
-    # {"title": "The New York Times", "url": "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml", "description": "Latest from NYT"},
-    # {"title": "Reuters", "url": "http://feeds.reuters.com/reuters/topNews", "description": "Top news from Reuters"},
-    # {"title": "NPR", "url": "https://feeds.npr.org/1001/rss.xml", "description": "National Public Radio news"},
+    {"title": "CNN", "url": "http://rss.cnn.com/rss/edition.rss", "description": "Breaking news from CNN"},
+    {"title": "The New York Times", "url": "https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml", "description": "Latest from NYT"},
+    {"title": "Reuters", "url": "http://feeds.reuters.com/reuters/topNews", "description": "Top news from Reuters"},
+    {"title": "NPR", "url": "https://feeds.npr.org/1001/rss.xml", "description": "National Public Radio news"},
 ]
 
 # Chat settings
