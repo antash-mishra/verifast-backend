@@ -6,7 +6,9 @@ from app.services.redis_service import (
     create_session, 
     get_session_history, 
     delete_session, 
-    session_exists
+    session_exists,
+    get_all_sessions,
+    delete_all_sessions
 )
 
 router = APIRouter(tags=["session"])
@@ -41,4 +43,19 @@ async def clear_session(session_id: str):
     # Delete session data
     await delete_session(session_id)
     
-    return {"message": "Session cleared successfully"} 
+    return {"message": "Session cleared successfully"}
+
+@router.get("/sessions")
+async def list_sessions():
+    """Get all active sessions with metadata."""
+    sessions = await get_all_sessions()
+    return {"sessions": sessions, "count": len(sessions)}
+
+@router.delete("/sessions")
+async def delete_sessions():
+    """Delete all active sessions."""
+    result = await delete_all_sessions()
+    return {
+        "message": f"Successfully deleted {result['deleted_count']} sessions",
+        "deleted_count": result["deleted_count"]
+    } 
