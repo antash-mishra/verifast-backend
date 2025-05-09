@@ -13,13 +13,19 @@ APP_VERSION = "0.1.0"
 HOST = os.getenv("HOST", "0.0.0.0")
 PORT = int(os.getenv("PORT", 8000))
 
+# CORS settings
+CORS_ORIGINS = ["*"]  # In production, specify your frontend domain
+CORS_CREDENTIALS = True
+CORS_METHODS = ["*"]
+CORS_HEADERS = ["*"]
+
 # Redis settings
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
-SESSION_TTL = int(os.getenv("SESSION_TTL", 86400))  # Default: 24 hours
+SESSION_TTL = int(os.getenv("SESSION_TTL", 43200))  # Default: 12 hours
 
 # Gemini API settings
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GEMINI_MODEL = "gemini-2.5-flash-preview-04-17"
+GEMINI_MODEL = "gemini-2.0-flash"
 
 # Vector DB settings
 EMBEDDINGS_MODEL = "jina-embeddings-v3"

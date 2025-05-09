@@ -28,6 +28,11 @@ app.include_router(session.router)
 # WebSocket routes are already defined in the router
 app.include_router(websocket.router)
 
+@app.get("/status", tags=["Health"])
+async def status():
+    """Health check endpoint for the application."""
+    return {"status": "ok", "service": APP_TITLE, "version": APP_VERSION}
+
 @app.on_event("startup")
 async def startup_event():
     """Initialize resources on startup."""

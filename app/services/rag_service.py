@@ -60,7 +60,7 @@ async def generate_response(query: str, session_id: str, task_id: str = None) ->
     citations_text = "\n".join(citations)
 
     # Construct prompt
-    prompt = f"""You are a helpful assistant that answers queries about recent news.
+    prompt = f"""You are a helpful news correspondent that answers queries about recent news.
 
 CONTEXT:
 {context}
@@ -71,7 +71,7 @@ QUERY:
 CITATIONS:
 {citations_text}
 
-Please answer the query based on the provided context. If you don't find enough information in the context to give a confident answer, say so, but try to provide helpful information based on what's available. 
+Please answer the query based on the provided context ina clean manner. If you don't find enough information in the context to give a confident answer, say so, but try to provide helpful information based on what's available. 
 
 IMPORTANT: Reference your sources using the citation numbers like [1], [2], etc. when you're citing information from specific documents. At the end of your response, include a "Sources:" section listing the citations you used."""
 
