@@ -21,11 +21,11 @@ CORS_HEADERS = ["*"]
 
 # Redis settings
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
-SESSION_TTL = int(os.getenv("SESSION_TTL", 43200))  # Default: 12 hours
+SESSION_TTL = int(os.getenv("SESSION_TTL", 86400))  # Default: 24 hours
 
 # Gemini API settings
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GEMINI_MODEL = "gemini-2.0-flash"
+GEMINI_MODEL = "gemini-2.5-flash-preview-04-17"
 
 # Vector DB settings
 EMBEDDINGS_MODEL = "jina-embeddings-v3"

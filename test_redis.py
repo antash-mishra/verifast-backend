@@ -3,12 +3,32 @@ import sys
 import socket
 import time
 import logging
+import os
+from urllib.parse import urlparse
+import redis.exceptions
+import inspect
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
+DEFAULT_REDIS_URL = "redis://default:cd28530fd7d047cab18f88137ca13940@fly-verifast-backend-sparkling-sea-4629-redis.upstash.io:6379"
+
+def parse_redis_url(redis_url):
+    parsed = urlparse(redis_url)
+    host = parsed.hostname
+    port = parsed.port or 6379
+    password = parsed.password
+    return host, port, password
+
+def resolve(val):
+    # Helper to resolve awaitables if any (should not be needed for redis-py)
+    if inspect.isawaitable(val):
+        import asyncio
+        return asyncio.get_event_loop().run_until_complete(val)
+    return val
 
 def check_redis_connection(host="localhost", port=6379, password=None, max_retries=5, retry_delay=1):
     """Check if Redis server is running and accessible.
@@ -29,10 +49,10 @@ def check_redis_connection(host="localhost", port=6379, password=None, max_retri
     while retry_count < max_retries:
         try:
             # Try to ping Redis
-            response = redis_client.ping()
+            response = resolve(redis_client.ping())
             if response:
                 # Get Redis info
-                info = redis_client.info()
+                info = resolve(redis_client.info())
                 logger.info(f"Successfully connected to Redis at {host}:{port}")
                 logger.info(f"Redis version: {info.get('redis_version')}")
                 logger.info(f"Redis mode: {info.get('redis_mode', 'standalone')}")
@@ -41,7 +61,7 @@ def check_redis_connection(host="localhost", port=6379, password=None, max_retri
                 
                 # Test basic operations
                 redis_client.set("test_key", "test_value")
-                value = redis_client.get("test_key")
+                value = resolve(redis_client.get("test_key"))
                 logger.info(f"Test key value: {value.decode('utf-8') if value else None}")
                 redis_client.delete("test_key")
                 
@@ -80,7 +100,7 @@ def scan_for_redis(start_port=6379, end_port=6389):
                 # Try to connect to Redis at this port
                 try:
                     r = redis.Redis(host='localhost', port=port, socket_timeout=1)
-                    if r.ping():
+                    if resolve(r.ping()):
                         found_servers.append(port)
                         logger.info(f"Found Redis server at port {port}")
                 except:
@@ -94,13 +114,24 @@ if __name__ == "__main__":
     import argparse
     
     parser = argparse.ArgumentParser(description="Redis Connection Tester")
-    parser.add_argument("--host", default="localhost", help="Redis host address")
-    parser.add_argument("--port", type=int, default=6379, help="Redis port")
+    parser.add_argument("--host", help="Redis host address")
+    parser.add_argument("--port", type=int, help="Redis port")
     parser.add_argument("--password", help="Redis password")
+    parser.add_argument("--url", help="Full Redis URL (overrides host/port/password)")
     parser.add_argument("--scan", action="store_true", help="Scan for Redis servers on common ports")
     
     args = parser.parse_args()
     
+    if args.url:
+        host, port, password = parse_redis_url(args.url)
+    elif args.host:
+        host = args.host
+        port = args.port or 6379
+        password = args.password
+    else:
+        # Default to Upstash Redis URL
+        host, port, password = parse_redis_url(DEFAULT_REDIS_URL)
+
     if args.scan:
         found_servers = scan_for_redis()
         if found_servers:
@@ -108,5 +139,5 @@ if __name__ == "__main__":
         else:
             logger.info("No Redis servers found on common ports")
     else:
-        success = check_redis_connection(args.host, args.port, args.password)
+        success = check_redis_connection(host, port, password)
         sys.exit(0 if success else 1)

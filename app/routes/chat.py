@@ -39,8 +39,36 @@ async def get_status():
     """Get system status."""
     vector_store_status = get_vector_store_status()
     
+    ingestion_info = vector_store_status["ingestion"]
+    
+    # Determine overall system status based on vector store and ingestion status
+    system_status = "ok"
+    status_message = "System is ready"
+    
+    if ingestion_info["is_ingesting"]:
+        system_status = "initializing"
+        status_message = f"Loading news data ({ingestion_info['progress_percentage']}% complete)"
+    elif ingestion_info["status"] == "failed":
+        system_status = "error"
+        status_message = f"Error loading news data: {ingestion_info['error_message']}"
+    elif not vector_store_status["initialized"]:
+        system_status = "not_ready"
+        status_message = "Vector store not initialized"
+    
     return {
-        "status": "ok",
+        "status": system_status,
+        "message": status_message,
         "vector_store_ready": vector_store_status["initialized"],
-        "news_sources": vector_store_status["sources"]
+        "news_sources": vector_store_status["sources"],
+        "ingestion_status": {
+            "in_progress": ingestion_info["is_ingesting"],
+            "status": ingestion_info["status"],
+            "progress": ingestion_info["progress_percentage"],
+            "sources_processed": f"{ingestion_info['sources_processed']}/{ingestion_info['total_sources']}",
+            "articles_processed": ingestion_info["articles_processed"],
+            "articles_failed": ingestion_info["articles_failed"],
+            "chunks_created": ingestion_info["chunks_created"],
+            "elapsed_time": ingestion_info["elapsed_time_seconds"]
+        },
+        "detailed_info": ingestion_info
     } 

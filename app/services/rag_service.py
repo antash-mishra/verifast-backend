@@ -10,6 +10,7 @@ from langchain_community.document_loaders import WebBaseLoader
 from langchain_community.vectorstores import Qdrant
 from langchain_community.embeddings import JinaEmbeddings
 from langchain_core.runnables import RunnableConfig
+import time
 
 from app.config import (
     GEMINI_API_KEY,
@@ -40,6 +41,21 @@ embeddings = JinaEmbeddings(session=None, jina_api_key=SecretStr(JINA_API_KEY or
 
 # Initialize vector store (will be populated during ingestion)
 vector_store = None
+
+# Ingestion status tracking
+ingestion_status = {
+    "is_ingesting": False,
+    "started_at": None,
+    "completed_at": None,
+    "sources_processed": 0,
+    "total_sources": len(NEWS_SOURCES),
+    "articles_processed": 0,
+    "articles_failed": 0,
+    "chunks_created": 0,
+    "status": "not_started",  # not_started, in_progress, completed, failed
+    "progress_percentage": 0,
+    "error_message": None
+}
 
 async def generate_response(query: str, session_id: str, task_id: Optional[str] = None) -> str:
     """Generate response using RAG pattern with citations, incorporating chat history correctly."""
@@ -76,17 +92,29 @@ async def generate_response(query: str, session_id: str, task_id: Optional[str] 
     # The system prompt aspects (persona, instructions) are part of the user's turn content.
     # Chat history is handled by the ChatSession.
     
-    system_instructions = f"""INSTRUCTIONS:
-- You are a helpful news correspondent.
-- Format your response in clear, concise bullet points.
-- Each main point should start with a bullet '•' or '-'.
-- Provide an easy-to-read structure with key information broken down into distinct points.
-- Bold important facts, names, or statistics using markdown (e.g., **key fact**).
-- Reference your sources using the citation numbers like [1], [2], etc., based on the CONTEXT provided below.
-- At the end of your response, include a "Sources:" section listing the citations you used.
-- If you don't find enough information in the CONTEXT to give a confident answer, clearly state that.
-- Base your answers on the provided CONTEXT and CITATIONS only. Do not use external knowledge.
-- Keep your bullet points concise but informative for better readability."""
+    system_instructions = f"""FORMATTING RULES (FOLLOW EXACTLY):
+1. Start your response with a brief introductory sentence summarizing the key information.
+2. Then present your answer as a SINGLE LIST of bullet points using this exact format:
+   * Point 1 about **key term** with citation [1].
+   * Point 2 about another **important fact** with citation [2].
+   * Point 3 with more information about the topic [3].
+
+3. IMPORTANT RULES:
+   - Use ONLY the asterisk (*) for bullet points, never use numbers, dashes or other symbols.
+   - Put ONE SPACE after each asterisk.
+   - Make each bullet point a COMPLETE sentence that can stand alone.
+   - Bold important terms using double asterisks like **this**.
+   - Add citation numbers in square brackets [1] at the end of relevant points.
+   - NEVER place bullet points on separate lines without content.
+   - ALWAYS end each bullet point with proper punctuation.
+
+4. End with a "Sources:" section formatted exactly like this:
+   **Sources:**
+   * [1] First source with details
+   * [2] Second source with details
+
+BASE YOUR RESPONSE ONLY ON THE CONTEXT PROVIDED. DO NOT ADD INFORMATION FROM OTHER SOURCES.
+"""
 
     # The user's current query, augmented with RAG context and instructions.
     # This is what gets sent as the "user" part of the current turn.
@@ -132,14 +160,33 @@ QUERY:
 
 async def ingest_news() -> Dict[str, Any]:
     """Ingest news articles from RSS feeds and store in vector database."""
-    global vector_store
+    global vector_store, ingestion_status
+    
+    # Update ingestion status to "in progress"
+    ingestion_status["is_ingesting"] = True
+    ingestion_status["started_at"] = time.time()
+    ingestion_status["status"] = "in_progress"
+    ingestion_status["sources_processed"] = 0
+    ingestion_status["articles_processed"] = 0
+    ingestion_status["articles_failed"] = 0
+    ingestion_status["chunks_created"] = 0
+    ingestion_status["progress_percentage"] = 0
+    ingestion_status["error_message"] = None
 
     print("Starting news ingestion...")
     all_texts = []
 
-    for source_info in NEWS_SOURCES: # Renamed 'source' to 'source_info' to avoid conflict
+    for i, source_info in enumerate(NEWS_SOURCES): # Renamed 'source' to 'source_info' to avoid conflict
         try:
             feed = feedparser.parse(source_info["url"])
+            
+            # Update source progress
+            ingestion_status["sources_processed"] += 1
+            ingestion_status["progress_percentage"] = int((ingestion_status["sources_processed"] / ingestion_status["total_sources"]) * 100)
+            
+            successful_articles = 0
+            failed_articles = 0
+            
             for entry in feed.entries[:10]:
                 title = entry.get("title", "")
                 link = entry.get("link", "")
@@ -151,20 +198,37 @@ async def ingest_news() -> Dict[str, Any]:
                         doc.metadata["url"] = link
                         doc.metadata["title"] = title
                         all_texts.append(doc)
+                    successful_articles += 1
+                    ingestion_status["articles_processed"] += 1
                 except Exception as e:
                     print(f"Error loading article {link}: {e}")
+                    failed_articles += 1
+                    ingestion_status["articles_failed"] += 1
+            
+            print(f"Processed source {source_info['title']}: {successful_articles} articles loaded, {failed_articles} failed")
+            
         except Exception as e:
             print(f"Error processing source {source_info['url']}: {e}")
+            ingestion_status["articles_failed"] += 1
 
     if not all_texts:
         print("No articles were successfully loaded. Ingestion cannot proceed.")
+        ingestion_status["status"] = "failed"
+        ingestion_status["error_message"] = "No articles were successfully loaded."
+        ingestion_status["is_ingesting"] = False
+        ingestion_status["completed_at"] = time.time()
         return {"status": "failure", "message": "No articles loaded."}
 
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
     splits = text_splitter.split_documents(all_texts)
+    ingestion_status["chunks_created"] = len(splits)
 
     if not splits:
         print("No text chunks were created after splitting. Ingestion cannot proceed.")
+        ingestion_status["status"] = "failed"
+        ingestion_status["error_message"] = "No text chunks were created after splitting."
+        ingestion_status["is_ingesting"] = False
+        ingestion_status["completed_at"] = time.time()
         return {"status": "failure", "message": "No text chunks created."}
 
     try:
@@ -174,15 +238,47 @@ async def ingest_news() -> Dict[str, Any]:
             location=VECTOR_STORE_PATH,
             collection_name=COLLECTION_NAME
         )
+        ingestion_status["status"] = "completed"
+        ingestion_status["is_ingesting"] = False
+        ingestion_status["completed_at"] = time.time()
+        ingestion_status["progress_percentage"] = 100
+        
         print(f"Completed ingestion of {len(splits)} text chunks from {len(all_texts)} articles. Vector store initialized.")
         return {"status": "success", "articles_processed": len(all_texts), "chunks_created": len(splits)}
     except Exception as e:
         print(f"Error creating vector store: {e}")
+        ingestion_status["status"] = "failed"
+        ingestion_status["error_message"] = f"Error creating vector store: {e}"
+        ingestion_status["is_ingesting"] = False
+        ingestion_status["completed_at"] = time.time()
         return {"status": "failure", "message": f"Error creating vector store: {e}"}
 
 def get_vector_store_status() -> Dict[str, Any]:
     """Get the status of the vector store."""
+    global ingestion_status
+    
+    elapsed_time = None
+    if ingestion_status["started_at"]:
+        if ingestion_status["completed_at"]:
+            elapsed_time = round(ingestion_status["completed_at"] - ingestion_status["started_at"], 2)
+        else:
+            elapsed_time = round(time.time() - ingestion_status["started_at"], 2)
+    
     return {
         "initialized": vector_store is not None,
-        "sources": len(NEWS_SOURCES)
+        "sources": len(NEWS_SOURCES),
+        "ingestion": {
+            "status": ingestion_status["status"],
+            "is_ingesting": ingestion_status["is_ingesting"],
+            "progress_percentage": ingestion_status["progress_percentage"],
+            "sources_processed": ingestion_status["sources_processed"],
+            "total_sources": ingestion_status["total_sources"],
+            "articles_processed": ingestion_status["articles_processed"],
+            "articles_failed": ingestion_status["articles_failed"],
+            "chunks_created": ingestion_status["chunks_created"],
+            "started_at": ingestion_status["started_at"],
+            "completed_at": ingestion_status["completed_at"],
+            "elapsed_time_seconds": elapsed_time,
+            "error_message": ingestion_status["error_message"]
+        }
     }
