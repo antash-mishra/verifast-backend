@@ -1,125 +1,71 @@
-# RAG News Chatbot Backend API
+# RAG News Chatbot Backend
 
-## Overview
-This is a Retrieval-Augmented Generation (RAG) chatbot API built with FastAPI that answers queries over a news corpus. The application uses Redis for in-memory caching of chat history and Qdrant as the vector store for efficient similarity search.
+A FastAPI backend that powers a Retrieval-Augmented Generation (RAG) chatbot for answering questions about recent news articles.
 
 ## Features
-- RAG pipeline for answering questions about news articles
-- Redis caching for session history and message storage
-- Gemini Pro AI for generating responses
-- Jina Embeddings for vectorizing article content
-- WebSocket support for streaming responses
-- Automatic news ingestion from multiple RSS feeds
-- REST API endpoints for session management and chat
 
-## Getting Started
+- Automatic news ingestion from multiple RSS feeds
+- Vector-based semantic search for relevant news content
+- Gemini Pro AI integration for natural language responses
+- WebSocket support for streaming real-time responses
+- Session management with Redis
+- Citation tracking to reference source articles
+
+## Setup
 
 ### Prerequisites
+
 - Python 3.9+
-- Redis server (local or remote)
+- Redis server
 - Gemini API key
 
-### Environment Variables
-Create a `.env` file with the following variables:
-```
-REDIS_URL=redis://localhost:6379
-GEMINI_API_KEY=your-gemini-api-key
-SESSION_TTL=86400  # 24 hours in seconds
-```
-
 ### Installation
-1. Clone the repository
-2. Install dependencies:
-```
+
+```bash
+# Install dependencies
 pip install -r requirements.txt
+
+# Create .env file with required environment variables
+echo "REDIS_URL=redis://localhost:6379
+GEMINI_API_KEY=your-gemini-api-key" > .env
 ```
 
 ### Running the Application
-Start the server with:
-```
+
+```bash
 python main.py
 ```
-The API will be available at `http://localhost:8000`
 
-## API Documentation
-Once the server is running, interactive API documentation is available at:
-- Swagger UI: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
+The server will start on http://localhost:8000
 
-## Endpoints
-
-### Session Management
-- `POST /session`: Create a new chat session
-- `GET /history/{session_id}`: Get chat history for a session
-- `DELETE /session/{session_id}`: Clear a chat session
+## API Endpoints
 
 ### Chat
+
 - `POST /chat`: Send a message and get a response
-- `WebSocket /ws/chat/{session_id}`: Stream chat messages and responses
+- `WebSocket /ws/chat/{session_id}`: Stream chat messages with real-time responses
 
-### System Status
-- `GET /`: Returns a welcome message
-- `GET /status`: Get system status including vector store readiness
+### Session Management
 
-## Caching and Performance
+- `POST /session`: Create a new chat session
+- `GET /sessions`: List available sessions
+- `GET /history/{session_id}`: Get chat history for a session
+- `DELETE /session/{session_id}`: Clear a session
 
-### Redis TTL Configuration
-The application uses Redis to store chat history with configurable Time-To-Live (TTL) values. This helps:
+### System
 
-1. **Prevent memory overflow**: Old sessions are automatically evicted
-2. **Maintain data freshness**: Expired sessions are cleaned up
-3. **Improve response time**: Fast retrieval of session data
+- `GET /status`: Check system status and news ingestion progress
 
-The TTL is configured using the `SESSION_TTL` environment variable (default: 24 hours).
+## Documentation
 
-### Cache Warming Strategies
-For production deployment, consider these cache warming strategies:
+API documentation is available at:
+- http://localhost:8000/docs (Swagger UI)
+- http://localhost:8000/redoc (ReDoc)
 
-1. **Periodic News Ingestion**: Automatically refresh news articles every few hours
-   ```python
-   # Example scheduler using APScheduler
-   from apscheduler.schedulers.asyncio import AsyncIOScheduler
-   
-   scheduler = AsyncIOScheduler()
-   scheduler.add_job(ingest_news, 'interval', hours=4)
-   scheduler.start()
-   ```
+## Environment Variables
 
-2. **Prefetching Popular Queries**: Store responses for common queries
-   ```python
-   # Example of prefetching responses for common queries
-   common_queries = ["latest world news", "top tech news", "breaking news"]
-   for query in common_queries:
-       response = await generate_response(query, "system")
-       await redis_client.set(f"cached_response:{query}", response, ex=3600)
-   ```
-
-3. **Intelligent Redis Eviction Policies**: Configure Redis with the right eviction policy
-   ```
-   # In redis.conf
-   maxmemory 2gb
-   maxmemory-policy allkeys-lru  # Least Recently Used
-   ```
-
-## Vector Store Details
-The application uses an in-memory Qdrant vector store for demo purposes. For production:
-
-1. **Persistent Storage**: Configure Qdrant with a persistent path
-   ```python
-   vector_store = Qdrant.from_documents(
-       documents=splits,
-       embedding=embeddings,
-       location="./qdrant_data",  # Persistent storage
-       collection_name="news_articles"
-   )
-   ```
-
-2. **Separate Qdrant Server**: Run Qdrant as a separate service
-   ```python
-   from qdrant_client import QdrantClient
-   
-   client = QdrantClient(url="http://qdrant-server:6333")
-   ```
-
-## Development
-During development, the server automatically reloads when code changes are detected.
+- `REDIS_URL`: Connection string for Redis (default: `redis://localhost:6379`)
+- `GEMINI_API_KEY`: API key for Google's Gemini AI model
+- `PORT`: Server port (default: `8000`)
+- `HOST`: Server host (default: `0.0.0.0`)
+- `SESSION_TTL`: Session time-to-live in seconds (default: `86400`)
